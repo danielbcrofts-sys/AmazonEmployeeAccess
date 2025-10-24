@@ -1,0 +1,339 @@
+
+R version 4.5.1 (2025-06-13) -- "Great Square Root"
+Copyright (C) 2025 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> .libPaths("/yunity/dcrofts0/R/x86_64-pc-linux-gnu-library/4.5")
+> 
+> 
+> library(tidyverse)
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ ggplot2   4.0.0     ✔ tibble    3.2.1
+✔ lubridate 1.9.3     ✔ tidyr     1.3.1
+✔ purrr     1.1.0     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+> library(tidymodels)
+── Attaching packages ────────────────────────────────────── tidymodels 1.4.1 ──
+✔ broom        1.0.10     ✔ rsample      1.3.1 
+✔ dials        1.4.2      ✔ tailor       0.1.0 
+✔ infer        1.0.9      ✔ tune         2.0.0 
+✔ modeldata    1.5.1      ✔ workflows    1.3.0 
+✔ parsnip      1.3.3      ✔ workflowsets 1.1.1 
+✔ recipes      1.3.1      ✔ yardstick    1.3.2 
+── Conflicts ───────────────────────────────────────── tidymodels_conflicts() ──
+✖ scales::discard() masks purrr::discard()
+✖ dplyr::filter()   masks stats::filter()
+✖ recipes::fixed()  masks stringr::fixed()
+✖ dplyr::lag()      masks stats::lag()
+✖ yardstick::spec() masks readr::spec()
+✖ recipes::step()   masks stats::step()
+> library(vroom)
+
+Attaching package: ‘vroom’
+
+The following object is masked from ‘package:yardstick’:
+
+    spec
+
+The following object is masked from ‘package:scales’:
+
+    col_factor
+
+The following objects are masked from ‘package:readr’:
+
+    as.col_spec, col_character, col_date, col_datetime, col_double,
+    col_factor, col_guess, col_integer, col_logical, col_number,
+    col_skip, col_time, cols, cols_condense, cols_only, date_names,
+    date_names_lang, date_names_langs, default_locale, fwf_cols,
+    fwf_empty, fwf_positions, fwf_widths, locale, output_column,
+    problems, spec
+
+> library(dplyr)
+> library(ggplot2)
+> library(kknn)
+> 
+> 
+> ## PASSWORD
+> #Password for server thing Vonald10!Vonald10!
+> 
+> 
+> set.seed(123)
+> dat_train <- vroom("train.csv")
+Rows: 32769 Columns: 10
+── Column specification ────────────────────────────────────────────────────────
+Delimiter: ","
+dbl (10): ACTION, RESOURCE, MGR_ID, ROLE_ROLLUP_1, ROLE_ROLLUP_2, ROLE_DEPTN...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> dat_test <- vroom("test.csv")
+Rows: 58921 Columns: 10
+── Column specification ────────────────────────────────────────────────────────
+Delimiter: ","
+dbl (10): id, RESOURCE, MGR_ID, ROLE_ROLLUP_1, ROLE_ROLLUP_2, ROLE_DEPTNAME,...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> # glimpse(dat_train)
+> # glimpse(dat_test)
+> 
+> 
+> ### EDA
+> 
+> # Plot 1
+> ggplot(dat_train, aes(x = factor(ACTION), fill = factor(ACTION))) +
++   geom_bar() +
++   labs(
++     title = "Distribution of Access Granted vs. Denied",
++     x = "Action (0 = Denied, 1 = Granted)",
++     y = "Count"
++   ) +
++   scale_fill_manual(values = c("red", "darkgreen"), guide = FALSE)
+Warning message:
+The `guide` argument in `scale_*()` cannot be `FALSE`. This was deprecated in
+ggplot2 3.3.4.
+ℹ Please use "none" instead. 
+> 
+> 
+> #Plot 2
+> dat_train %>%
++   group_by(RESOURCE) %>%
++   summarize(approval_rate = mean(ACTION)) %>%
++   ggplot(aes(x = approval_rate)) +
++   geom_histogram(binwidth = 0.05, fill = "steelblue", color = "white") +
++   labs(
++     title = "Distribution of Approval Rates Across Resources",
++     x = "Approval Rate (per Resource)",
++     y = "Number of Resources"
++   )
+> 
+> 
+> ### DUMMY ENCODING AND NUM COLUMNS FOR HW1
+> dat_train <- dat_train %>%
++   mutate(ACTION = as.factor(ACTION))
+> 
+> amazon_recipe <- recipe(ACTION ~ ., data = dat_train) %>%
++   step_mutate_at(all_predictors(), fn = factor) %>%
++   step_other(all_nominal_predictors(), threshold = 0.001) %>%
++   step_dummy(all_nominal_predictors())                        # dummy encode
+> 
+> amazon_prep <- prep(amazon_recipe)
+> amazon_baked <- bake(amazon_prep, new_data = dat_train)
+> 
+> # ncol(amazon_baked)
+> 
+> 
+> 
+> # ### LOGISTIC REGRESSION
+> # 
+> # logRegModel <- logistic_reg() %>%
+> #   set_engine("glm")
+> # 
+> # logReg_workflow <- workflow() %>%
+> #   add_model(logRegModel) %>%
+> #   add_recipe(amazon_recipe)
+> # 
+> # logReg_fit <- fit(logReg_workflow, data = dat_train)
+> # 
+> # amazon_predictions <- predict(
+> #   logReg_fit,
+> #   new_data = dat_test,
+> #   type = "prob"   # "prob" gives predicted probabilities for both 0 and 1
+> # )
+> # 
+> # submission <- tibble(
+> #   Id = 1:nrow(dat_test),
+> #   ACTION = amazon_predictions$.pred_1
+> # )
+> # 
+> # write.csv(submission, "amazon_submission.csv", row.names = FALSE)
+> # 
+> # 
+> # ### LOGISTIC PENALIZED REGRESSION
+> # 
+> # tuning_grid <- grid_regular(
+> #   penalty(range = c(-4, 0)),
+> #   mixture(),
+> #   levels = 5
+> # )
+> # 
+> # # CV
+> # 
+> # folds <- vfold_cv(dat_train, v = 5)
+> # 
+> # 
+> # CV_results <- logReg_workflow %>%
+> #   tune_grid(
+> #     resamples = folds,
+> #     grid = tuning_grid,
+> #     metrics = metric_set(roc_auc, accuracy)
+> #   )
+> # 
+> # # ROC
+> # bestTune <- select_best(CV_results, metric = "roc_auc")
+> # 
+> # 
+> # final_wf <- logReg_workflow %>%
+> #   finalize_workflow(bestTune) %>%
+> #   fit(data = dat_train)
+> # 
+> # amazon_predictions <- predict(
+> #   final_wf,
+> #   new_data = dat_test,
+> #   type = "prob"
+> # )
+> # 
+> # 
+> # submission <- tibble(
+> #   Id = 1:nrow(dat_test),
+> #   ACTION = amazon_predictions$.pred_1
+> # )
+> # 
+> # vroom::vroom_write(submission, "submission.csv")
+> # 
+> # bestTune %>%
+> #   dplyr::select(penalty, mixture)
+> # bestTune
+> # 
+> # 
+> # 
+> # ### BINARY RANDOM FORESTS
+> # 
+> # 
+> # rf_mod <- rand_forest(
+> #   mtry  = tune(),
+> #   min_n = tune(),
+> #   trees = 100
+> # ) %>%
+> #   set_engine("ranger") %>%
+> #   set_mode("classification")
+> # 
+> # rf_workflow <- workflow() %>%
+> #   add_model(rf_mod) %>%
+> #   add_recipe(amazon_recipe)
+> # 
+> # # grid of tuning values
+> # rf_grid <- grid_regular(
+> #   mtry(range = c(10, 60)),
+> #   min_n(range = c(2, 10)),
+> #   levels = 3
+> # )
+> # # cross-validation
+> # rf_folds <- vfold_cv(dat_train, v = 5)
+> # 
+> # # Tune the model
+> # rf_results <- rf_workflow %>%
+> #   tune_grid(
+> #     resamples = rf_folds,
+> #     grid = rf_grid,
+> #     metrics = metric_set(roc_auc, accuracy)
+> #   )
+> # 
+> # # best tuning parameters
+> # best_rf <- select_best(rf_results, metric = "roc_auc")
+> # 
+> # 
+> # final_rf_wf <- rf_workflow %>%
+> #   finalize_workflow(best_rf) %>%
+> #   fit(data = dat_train)
+> # 
+> # # predict on test dat
+> # rf_predictions <- predict(
+> #   final_rf_wf,
+> #   new_data = dat_test,
+> #   type = "prob"
+> # )
+> # 
+> # submission <- tibble(
+> #   Id = 1:nrow(dat_test),
+> #   ACTION = rf_predictions$.pred_1
+> # )
+> # 
+> # vroom::vroom_write(submission, "rf_submission.csv", delim = ",")
+> # 
+> # 
+> # 
+> # ### KNN
+> # 
+> # 
+> # 
+> # amazon_recipe_knn <- amazon_recipe %>%
+> #   step_normalize(all_predictors())
+> # 
+> # 
+> # knn_model <- nearest_neighbor(
+> #   neighbors = tune()       # number of neighbors (K)
+> # ) %>%
+> #   set_mode("classification") %>%
+> #   set_engine("kknn")
+> # 
+> # 
+> # knn_wf <- workflow() %>%
+> #   add_recipe(amazon_recipe_knn) %>%
+> #   add_model(knn_model)
+> # 
+> # 
+> # knn_grid <- tibble(neighbors = c(1, 5, 11, 21, 31))
+> # 
+> # 
+> # knn_folds <- vfold_cv(dat_train, v = 3)
+> # 
+> # 
+> # knn_results <- knn_wf %>%
+> #   tune_grid(
+> #     resamples = knn_folds,
+> #     grid = knn_grid,
+> #     metrics = metric_set(roc_auc, accuracy)
+> #   )
+> # 
+> # best_k <- select_best(knn_results, metric = "roc_auc")
+> # 
+> # #best_k
+> # 
+> # 
+> # 
+> # 
+> # final_knn_wf <- knn_wf %>%
+> #   finalize_workflow(best_k) %>%
+> #   fit(data = dat_train)
+> # 
+> # 
+> # knn_predictions <- predict(
+> #   final_knn_wf,
+> #   new_data = dat_test,
+> #   type = "prob"
+> # )
+> # 
+> # 
+> # submission <- tibble(
+> #   Id = 1:nrow(dat_test),
+> #   ACTION = knn_predictions$.pred_1
+> # )
+> # 
+> # vroom::vroom_write(submission, "knn_submission.csv", delim = ",")
+> # 
+> # 
+> # 
+> 
+> proc.time()
+   user  system elapsed 
+ 65.279   3.017  68.530 
